@@ -63,7 +63,7 @@ async function operator(proxies = [], targetPlatform, context) {
         if (cacheEnabled && cached) {
           $.info(`[${proxy.name}] 使用缓存`)
           if (cached.gpt) {
-            proxy.name = `${proxy.name}`
+            proxy.name = `${proxy.name}ᴳᴾᵀ`
           }
           return
         }
@@ -93,7 +93,7 @@ async function operator(proxies = [], targetPlatform, context) {
         // https://zset.cc/archives/34/
         // 更新: 403 的时候, 还得看响应
         if (status == 403 && !['unsupported_country'].includes(msg)) {
-          proxy.name = `${proxy.name} ᴳᴾᵀ`
+          proxy.name = `${proxy.name}`
           if (cacheEnabled) {
             $.info(`[${proxy.name}] 设置成功缓存`)
             cache.set(id, { gpt: true })
