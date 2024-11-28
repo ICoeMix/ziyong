@@ -63,7 +63,7 @@ async function operator(proxies = [], targetPlatform, context) {
         if (cacheEnabled && cached) {
           $.info(`[${proxy.name}] 使用缓存`)
           if (cached.gpt) {
-            proxy.name = `${proxy.name} ᴳᴾᵀ`
+            proxy.name = `${proxy.name}`
           }
           return
         }
