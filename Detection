@@ -1,4 +1,4 @@
-/**
+ /**
  * GPT 检测(适配 Surge/Loon 版)
  *
  * 适配 Sub-Store Node.js 版 请查看: https://t.me/zhetengsha/1209
@@ -63,7 +63,7 @@ async function operator(proxies = [], targetPlatform, context) {
         if (cacheEnabled && cached) {
           $.info(`[${proxy.name}] 使用缓存`)
           if (cached.gpt) {
-            proxy.name = `${proxy.name}ᴳᴾᵀ`
+            proxy.name = `${proxy.name} ᴳᴾᵀ`
           }
           return
         }
@@ -85,15 +85,15 @@ async function operator(proxies = [], targetPlatform, context) {
           body = JSON.parse(body)
         } catch (e) {}
         // $.info(`body ${JSON.stringify(body, null, 2)}`)
-        const msg = body?.error?.error_type || body?.cf_details
+        const msg = body?.error?.error.code?.error.type || body?.cf_details
         let latency = ''
         latency = `${Date.now() - startedAt}`
         $.info(`[${proxy.name}] status: ${status}, msg: ${msg}, latency: ${latency}`)
         // cf 拦截是 400 错误, 403 就是没被拦截, 走到了未鉴权的逻辑
         // https://zset.cc/archives/34/
         // 更新: 403 的时候, 还得看响应
-        if (status == 403 && !['unsupported_country'].includes(msg)) {
-          proxy.name = `${proxy.name}`
+        if (status == 403 && !['unsupported_country_region_territory'].includes(msg)) {
+          proxy.name = `${proxy.name} ᴳᴾᵀ`
           if (cacheEnabled) {
             $.info(`[${proxy.name}] 设置成功缓存`)
             cache.set(id, { gpt: true })
@@ -116,7 +116,7 @@ async function operator(proxies = [], targetPlatform, context) {
   // 请求
   async function http(opt = {}) {
     const METHOD = opt.method || 'get'
-    const TIMEOUT = parseFloat(opt.timeout || $arguments.timeout || 5000)
+    const TIMEOUT = parseFloat(opt.timeout || $arguments.timeout || 1000)
     const RETRIES = parseFloat(opt.retries ?? $arguments.retries ?? 1)
     const RETRY_DELAY = parseFloat(opt.retry_delay ?? $arguments.retry_delay ?? 1000)
 
