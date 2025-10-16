@@ -2870,113 +2870,19 @@ function paraCheck(content, para) {
   }
 }
 //surge中 trojan 类型转换
-/**
- * Parse a trojan-like single-line server string and convert to QX-style trojan=... line.
- * - Will remove surrounding single/double quotes around password (and other values).
- * - Will parse fields even if some values contain commas (it splits only on commas outside quotes).
- *
- * Example input:
- * trojan=80.251.210.247:443, password="1a803041766740c9865ebf01e893bb6e", over-tls=true, tls13=true, tfo=true, sni=example.com, skip-cert-verify=false, tag=🇺🇸 美国 01 - ...
- */
 function Strojan2QX(content) {
-  if (!content || typeof content !== 'string') return '';
-
-  // helper: split by commas that are NOT inside quotes
-  const parts = content.split(/,(?=(?:[^'"]|'[^']*'|"[^"]*")*$)/).map(p => p.trim());
-
-  // helper: strip surrounding quotes (single or double)
-  const stripQuotes = v => {
-    if (v == null) return v;
-    v = v.trim();
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-      return v.slice(1, -1);
-    }
-    return v;
-  };
-
-  // build map of key -> value; if part contains no "=", treat as flag or first token
-  const map = {};
-  parts.forEach((p, idx) => {
-    const eqIndex = p.indexOf('=');
-    if (eqIndex === -1) {
-      // no equals, maybe the first token like "trojan:..."; keep as raw
-      map[`__part${idx}`] = p;
-    } else {
-      const key = p.slice(0, eqIndex).trim();
-      const val = p.slice(eqIndex + 1).trim();
-      map[key] = stripQuotes(val);
-    }
-  });
-
-  // get ip:port (trojan target). Accept either "trojan" key or first part with trojan=
-  let ipport = '';
-  if (map['trojan']) {
-    ipport = map['trojan'];
-  } else {
-    // try to extract from the first part if formatted like "trojan=ip:port" w/o '=' captured earlier
-    const first = parts[0] || '';
-    const m = first.match(/trojan\s*=\s*(.+)/i);
-    ipport = m ? stripQuotes(m[1]) : '';
-  }
-  ipport = ipport.trim();
-
-  // password — ensure we remove quotes
-  // Some inputs may use key "password" or "pass" etc. We prioritize "password"
-  let password = map['password'] || map['pwd'] || '';
-  password = stripQuotes(password || '');
-
-  // over-tls: default true if present or forced
-  const overTls = (('over-tls' in map) ? (String(map['over-tls']).toLowerCase() === 'true') : true);
-  const ptls = overTls ? 'over-tls=true' : 'over-tls=false';
-
-  // fast-open: look for tfo or fast-open
-  const tfoVal = (map['tfo'] !== undefined) ? (String(map['tfo']).toLowerCase() === 'true' || map['tfo']==='1') :
-                 (map['fast-open'] !== undefined ? (String(map['fast-open']).toLowerCase() === 'true') : false);
-  const ptfo = tfoVal ? 'fast-open=true' : 'fast-open=false';
-
-  // tls13
-  const tls13Val = (map['tls13'] !== undefined) ? (String(map['tls13']).toLowerCase() === 'true' || map['tls13']==='1') : false;
-  const ptls13 = tls13Val ? 'tls13=true' : 'tls13=false';
-
-  // tls verification: handle skip-cert-verify or skip_verify variants
-  // If input contains skip-cert-verify=false => verification true; if skip-cert-verify=true => false
-  let tlsVerification = null;
-  if (map['skip-cert-verify'] !== undefined) {
-    tlsVerification = (String(map['skip-cert-verify']).toLowerCase() === 'false') ? 'tls-verification=true' : 'tls-verification=false';
-  } else if (map['tls-verification'] !== undefined) {
-    tlsVerification = (String(map['tls-verification']).toLowerCase() === 'true') ? 'tls-verification=true' : 'tls-verification=false';
-  } else {
-    // default (as your original code suggested): false
-    tlsVerification = 'tls-verification=false';
-  }
-
-  // tls-host / sni
-  const phost = (map['sni'] || map['tls-host'] || map['host'] || '') ? `tls-host=${stripQuotes((map['sni'] || map['tls-host'] || map['host'] || ''))}` : '';
-
-  // tag: try to grab explicit tag field; else fallback to building from ip/port or first token
-  let tag = '';
-  if (map['tag']) {
-    tag = `tag=${map['tag']}`;
-  } else if (map['remark']) {
-    tag = `tag=${map['remark']}`;
-  } else {
-    // fallback: try to get something meaningful (like ippart)
-    tag = ipport ? `tag=${ipport}` : '';
-  }
-
-  // assemble parts, only include non-empty values
-  const arr = [];
-  if (ipport) arr.push(ipport);
-  if (password) arr.push(`password=${password}`);
-  arr.push(ptls);
-  arr.push(ptfo);
-  arr.push(ptls13);
-  if (phost) arr.push(phost);
-  if (tlsVerification) arr.push(tlsVerification);
-  if (tag) arr.push(tag);
-
-  const nserver = 'trojan=' + arr.join(', ');
-  return nserver;
+  var cnt = content;
+  var tag = "tag=" + cnt.split("=")[0].trim();
+  var ipport = cnt.split(",")[1].trim() + ":" + cnt.split(",")[2].trim();
+  var pwd = "password=" + cnt.split("password")[1].split(",")[0].split("=")[1].trim().replace(/^["']|["']$/g,'');
+  var ptls = "over-tls=true";
+  var ptfo = paraCheck(cnt, "tfo") == "true" ? "fast-open=true" : "fast-open=false";
+  var pverify = cnt.replace(/ /g,"").indexOf("skip-cert-verify=false") != -1 ? "tls-verification=true" : "tls-verification=false";
+  var phost = cnt.indexOf("sni")!=-1? "tls-host="+cnt.split("sni")[1].split(",")[0].split("=")[1]:""
+  pvefify = Pcert0 == 1? "tls-verification=true" : pverify ;
+  var ptls13 = paraCheck(cnt, "tls13") == "true" ? "tls13=true" : "tls13=false";
+  var nserver = "trojan= " + [ipport, pwd, ptls, ptfo, ptls13, phost,pverify, tag].filter(Boolean).join(", ");
+  return nserver
 }
 // surge 中的 http 类型
 function Shttp2QX(content) {
