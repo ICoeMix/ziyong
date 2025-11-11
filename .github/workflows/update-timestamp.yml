@@ -1,0 +1,27 @@
+name: Update Timestamp
+
+on:
+  push:
+    branches: [ main ]  # 或 master，视你仓库分支名而定
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Update timestamp
+        run: |
+          TIMESTAMP=$(date +"⟦%Y-%m-%d %H:%M⟧")
+          echo "当前时间: $TIMESTAMP"
+          # 替换所有包含“资源解析器 ©𝐒𝐡𝐚𝐰𝐧”的行
+          sed -i "s/资源解析器 ©𝐒𝐡𝐚𝐰𝐧\s*⟦[0-9:\- ]*⟧/资源解析器 ©𝐒𝐡𝐚𝐰𝐧  $TIMESTAMP/g" *.js
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "🕒 Auto update timestamp"
+          git push
