@@ -14,32 +14,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 2️⃣ 查找文件
-      - name: Find files with timestamp placeholder
+      # 2️⃣ 查找占位符文件
+      - name: Find files with ⟦TIMESTAMP⟧
         id: find_files
         run: |
           FILES=$(grep -rl --include=\*.{js,ts} '⟦TIMESTAMP⟧' . || true)
           echo "files=$FILES" >> $GITHUB_OUTPUT
 
       # 3️⃣ 替换占位符
-      - name: Update timestamps
+      - name: Replace placeholders
         run: |
           FILES="${{ steps.find_files.outputs.files }}"
           if [ -z "$FILES" ]; then
-            echo "No files with timestamp placeholder found, skip."
+            echo "No files with timestamp placeholder found. Skipping."
             exit 0
           fi
 
           echo "$FILES" | tr ' ' '\n' | while IFS= read -r FILE; do
             if [ ! -f "$FILE" ]; then
-              echo "File not found: $FILE, skip."
+              echo "File not found: $FILE, skipping."
               continue
             fi
 
-            # 获取文件最后修改时间
+            # 获取 Git 最后修改时间
             LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE")
 
-            # 如果 git log 为空（首次提交或文件未修改），使用当前时间
+            # 如果文件没有历史，使用当前时间
             if [ -z "$LAST_MOD" ]; then
               LAST_MOD=$(date +"%Y-%m-%d %H:%M")
             fi
@@ -52,8 +52,8 @@ jobs:
             echo "Updated $FILE -> $TIMESTAMP"
           done
 
-      # 4️⃣ 提交修改
-      - name: Commit changes
+      # 4️⃣ 提交更改
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
