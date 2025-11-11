@@ -1,0 +1,36 @@
+name: Smart Timestamp Update
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 必须，否则无法获取diff
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Get changed (staged) files
+        id: diff
+        run: |
+          git fetch origin
+          git diff --name-only origin/main..HEAD > diff.txt
+          grep -E '\.(py|js|ts|c|cpp|go|md|java)$' diff.txt > changed.txt || true
+      - name: Update only changed files timestamp
+        run: |
+          if [ -s changed.txt ]; then
+            pip install --upgrade pip
+            xargs python update_timestamp.py < changed.txt
+          else
+            echo "No relevant files changed."
+          fi
+      - name: Commit & Push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --cached --quiet || (git commit -m "auto update timestamp [skip ci]" && git push)
