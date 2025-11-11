@@ -14,7 +14,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 2️⃣ 查找占位符文件
+      # 2️⃣ 查找包含占位符的文件
       - name: Find files with ⟦TIMESTAMP⟧
         id: find_files
         run: |
@@ -30,13 +30,14 @@ jobs:
             exit 0
           fi
 
+          # 循环处理每个文件
           echo "$FILES" | tr ' ' '\n' | while IFS= read -r FILE; do
             if [ ! -f "$FILE" ]; then
               echo "File not found: $FILE, skipping."
               continue
             fi
 
-            # 获取 Git 最后修改时间
+            # 获取文件 Git 最后修改时间
             LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE")
 
             # 如果文件没有历史，使用当前时间
@@ -48,6 +49,8 @@ jobs:
 
             # 替换占位符
             sed -i "s/⟦TIMESTAMP⟧/$TIMESTAMP/g" "$FILE"
+
+            # 添加到 Git 暂存区
             git add "$FILE"
             echo "Updated $FILE -> $TIMESTAMP"
           done
