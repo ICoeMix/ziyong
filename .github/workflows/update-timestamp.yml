@@ -8,21 +8,37 @@ jobs:
   update-timestamps:
     runs-on: ubuntu-latest
     steps:
+      # 1️⃣ 拉取完整仓库历史，保证 git log 可用
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # 确保 git log 有历史
+          fetch-depth: 0
 
+      # 2️⃣ 找到所有指定类型文件
+      - name: Find files with timestamp placeholder
+        id: find_files
+        run: |
+          FILES=$(grep -rl --include=\*.{js,ts} '⟦TIMESTAMP⟧' .)
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+
+      # 3️⃣ 替换占位符
       - name: Update timestamps
         run: |
-          grep -rl '⟦TIMESTAMP⟧' . | while read FILE; do
+          echo "Processing files: ${{ steps.find_files.outputs.files }}"
+          echo "${{ steps.find_files.outputs.files }}" | tr ' ' '\n' | while read FILE; do
+            # 获取文件最后修改时间
             LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE")
             TIMESTAMP="⟦$LAST_MOD⟧"
+
+            # 只替换占位符，不覆盖已修改过的时间
             sed -i "s/⟦TIMESTAMP⟧/$TIMESTAMP/g" "$FILE"
             git add "$FILE"
             echo "Updated $FILE -> $TIMESTAMP"
           done
 
+      # 4️⃣ 提交修改
+      - name: Commit changes
+        run: |
           git diff --cached --quiet || {
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
