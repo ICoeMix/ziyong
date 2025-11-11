@@ -1063,7 +1063,7 @@ function URX2QX(subs) {
                 let filepath = subs[i].split("data=")[1].split(" ")[0].replace(/\"/g,"").replace(/ /g,"");
                 // 如果路径为空，默认用 null.html
                 if (!filepath || filepath === "{}" || filepath.trim() === "") {
-                  filepath = " "; 
+                  filepath = "https://raw.githubusercontent.com/ICoeMix/ziyong/refs/heads/main/null.html"; 
                 }
                 rw = `${subs[i].replace(/ /g,"").split("data=")[0].split("data-type=")[0].replace(/\"/g,"")} url echo-response text/html echo-response ${filepath}`;
                 if (subs[i].indexOf("header=")!=-1) {
