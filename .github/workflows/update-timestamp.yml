@@ -14,15 +14,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 2️⃣ 查找包含占位符的文件
-      - name: Find files with ⟦TIMESTAMP⟧
+      # 2️⃣ 查找包含 ⟦TIMESTAMP⟧ 的文件
+      - name: Find files with timestamp placeholder
         id: find_files
         run: |
           FILES=$(grep -rl --include=\*.{js,ts} '⟦TIMESTAMP⟧' . || true)
           echo "files=$FILES" >> $GITHUB_OUTPUT
 
-      # 3️⃣ 安全替换占位符
-      - name: Replace placeholders
+      # 3️⃣ 替换占位符
+      - name: Replace placeholders safely
         run: |
           FILES="${{ steps.find_files.outputs.files }}"
           if [ -z "$FILES" ]; then
@@ -30,16 +30,15 @@ jobs:
             exit 0
           fi
 
-          # 循环处理每个文件
           echo "$FILES" | tr ' ' '\n' | while IFS= read -r FILE; do
+            # 文件不存在就跳过
             [ ! -f "$FILE" ] && continue
 
             # 获取 Git 最后修改时间
             LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE")
 
-            # 文件没有历史时使用当前时间
+            # 文件没有历史就用当前时间
             [ -z "$LAST_MOD" ] && LAST_MOD=$(date +"%Y-%m-%d %H:%M")
-
             TIMESTAMP="⟦$LAST_MOD⟧"
 
             # 替换占位符
