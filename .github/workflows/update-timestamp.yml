@@ -2,47 +2,55 @@ name: Update File Timestamps
 
 on:
   push:
-    branches: [ main ]  # 或者 master
+    branches: [ main ]
 
 jobs:
   update-timestamps:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
-      # 1️⃣ 拉取完整仓库历史，保证 git log 可用
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # 保证 git log 可用
 
-      # 2️⃣ 设置 Git 用户信息
       - name: Setup Git user
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # 3️⃣ 更新占位符，只针对修改过的文件
-      - name: Update timestamps for modified files
+      - name: Update timestamps for modified files (macOS compatible)
         run: |
-          # 获取这次 commit 修改的文件
-          git diff --name-only HEAD~1 HEAD | while IFS= read -r FILE; do
+          set -euo pipefail
+
+          # 获取上一次提交，如果没有就用空
+          PREV_COMMIT=$(git rev-parse HEAD~1 2>/dev/null || echo "")
+
+          if [ -z "$PREV_COMMIT" ]; then
+            MOD_FILES=$(git ls-files)  # 首次 push，全量处理
+          else
+            MOD_FILES=$(git diff --name-only "$PREV_COMMIT" HEAD || true)
+          fi
+
+          if [ -z "$MOD_FILES" ]; then
+            echo "No modified files, skipping."
+            exit 0
+          fi
+
+          echo "$MOD_FILES" | while IFS= read -r FILE; do
             [ ! -f "$FILE" ] && continue
             grep -q '⟦TIMESTAMP⟧' "$FILE" || continue
 
-            # 获取最后修改时间，如果为空用当前时间
-            LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE")
+            # 获取文件最后修改时间
+            LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE" || true)
             [ -z "$LAST_MOD" ] && LAST_MOD=$(date +"%Y-%m-%d %H:%M")
-
             TIMESTAMP="⟦$LAST_MOD⟧"
 
-            # 替换占位符
-            sed -i "s/⟦TIMESTAMP⟧/$TIMESTAMP/g" "$FILE"
+            # macOS 版本 sed 替换占位符
+            sed -i '' "s/⟦TIMESTAMP⟧/$TIMESTAMP/g" "$FILE"
 
-            # 添加到暂存区
             git add "$FILE"
             echo "Updated $FILE -> $TIMESTAMP"
           done
 
-      # 4️⃣ 提交修改
       - name: Commit and push
         run: |
           if git diff --cached --quiet; then
