@@ -1065,12 +1065,11 @@ function URX2QX(subs) {
                 rw = Mock2QXReject(subs[i], fn)
             } else {
                 let filepath = subs[i].split("data=")[1].split(" ")[0].replace(/\"/g,"").replace(/ /g,"");
-                // 如果路径为空，默认用 text.html
+                // 如果路径为空，默认用 null.html
                 if (!filepath) {
-                  filepath = "text.html";  // 你可以改成实际的空文件路径
+                  filepath = "https://raw.githubusercontent.com/ICoeMix/ziyong/refs/heads/main/null.html";  // 你可以改成实际的空文件路径
                 }
-                // 生成 QX 规则，保留原结构
-                rw = subs[i].replace(/ /g,"").split("data=")[0].split("data-type=")[0].replace(/\"/g,"") + " url echo-response text/html echo-response \"" + filepath + "\"";
+                rw = `${subs[i].replace(/ /g,"").split("data=")[0].split("data-type=")[0].replace(/\"/g,"")} url echo-response text/html echo-response ${filepath}`;
                 if (subs[i].indexOf("header=")!=-1) {
                     if (subs[i].indexOf("Content-Type:") !=-1) {
                         let tpe = subs[i].split("header=")[1].split("Content-Type:")[1].split(",")[0].replace(/\"/g,"")
