@@ -21,7 +21,7 @@ jobs:
           FILES=$(grep -rl --include=\*.{js,ts} '⟦TIMESTAMP⟧' . || true)
           echo "files=$FILES" >> $GITHUB_OUTPUT
 
-      # 3️⃣ 替换占位符
+      # 3️⃣ 安全替换占位符
       - name: Replace placeholders
         run: |
           FILES="${{ steps.find_files.outputs.files }}"
@@ -32,25 +32,19 @@ jobs:
 
           # 循环处理每个文件
           echo "$FILES" | tr ' ' '\n' | while IFS= read -r FILE; do
-            if [ ! -f "$FILE" ]; then
-              echo "File not found: $FILE, skipping."
-              continue
-            fi
+            [ ! -f "$FILE" ] && continue
 
-            # 获取文件 Git 最后修改时间
+            # 获取 Git 最后修改时间
             LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE")
 
-            # 如果文件没有历史，使用当前时间
-            if [ -z "$LAST_MOD" ]; then
-              LAST_MOD=$(date +"%Y-%m-%d %H:%M")
-            fi
+            # 文件没有历史时使用当前时间
+            [ -z "$LAST_MOD" ] && LAST_MOD=$(date +"%Y-%m-%d %H:%M")
 
             TIMESTAMP="⟦$LAST_MOD⟧"
 
             # 替换占位符
             sed -i "s/⟦TIMESTAMP⟧/$TIMESTAMP/g" "$FILE"
 
-            # 添加到 Git 暂存区
             git add "$FILE"
             echo "Updated $FILE -> $TIMESTAMP"
           done
