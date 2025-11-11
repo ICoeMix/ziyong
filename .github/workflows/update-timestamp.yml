@@ -2,42 +2,40 @@ name: Update File Timestamps
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]  # 或 master
 
 jobs:
   update-timestamps:
     runs-on: ubuntu-latest
     steps:
+      # 1️⃣ 拉取仓库代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2️⃣ 查找所有含有 ⟦TIMESTAMP⟧ 的文件
       - name: Find files with timestamp placeholder
         id: find_files
         run: |
           FILES=$(grep -rl '⟦TIMESTAMP⟧' . | tr '\n' ' ')
           echo "files=$FILES" >> $GITHUB_OUTPUT
 
+      # 3️⃣ 更新时间戳
       - name: Update timestamps
         run: |
           for FILE in ${{ steps.find_files.outputs.files }}; do
-            # 检查文件是否在本次 push 中被修改
-            MODIFIED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -w "$FILE" || true)
-            if [ -z "$MODIFIED" ]; then
-              echo "$FILE not modified, skip"
-              continue
-            fi
-
             # 获取文件最后修改时间
             LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE")
             TIMESTAMP="⟦$LAST_MOD⟧"
 
-            # 替换占位符
+            # 替换占位符（注释里也能替换）
             sed -i "s/⟦TIMESTAMP⟧/$TIMESTAMP/g" "$FILE"
             git add "$FILE"
             echo "Updated timestamp for $FILE -> $TIMESTAMP"
           done
 
-          # 提交修改
+      # 4️⃣ 提交修改
+      - name: Commit changes
+        run: |
           git diff --cached --quiet || {
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
