@@ -1,8 +1,11 @@
-name: Smart Timestamp Update
+name: update-timestamp
 
 on:
   push:
     branches: [main]
+
+permissions:
+  contents: write
 
 jobs:
   update:
@@ -10,14 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # 必须，否则无法获取diff
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - name: Get changed (staged) files
-        id: diff
+      - name: Get changed files
         run: |
-          git fetch origin
+          git fetch origin main
           git diff --name-only origin/main..HEAD > diff.txt
           grep -E '\.(py|js|ts|c|cpp|go|md|java)$' diff.txt > changed.txt || true
       - name: Update only changed files timestamp
@@ -33,4 +35,8 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git diff --cached --quiet || (git commit -m "auto update timestamp [skip ci]" && git push)
+          git diff --cached --quiet || (
+            git commit -m "auto update timestamp [skip ci]"
+            git pull origin main --rebase
+            git push origin main
+          )
