@@ -2,13 +2,13 @@ name: Update File Timestamps
 
 on:
   push:
-    branches: [ main ]  # 或者你的主分支名
+    branches: [ main ]
 
 jobs:
   update-timestamps:
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ 拉取完整仓库历史，保证 git log 可用
+      # 1️⃣ 拉取完整仓库历史
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -18,7 +18,6 @@ jobs:
       - name: Find files with timestamp placeholder
         id: find_files
         run: |
-          # 支持 .js 和 .ts 文件，可按需修改
           FILES=$(grep -rl --include=\*.{js,ts} '⟦TIMESTAMP⟧' . || true)
           echo "files=$FILES" >> $GITHUB_OUTPUT
 
@@ -39,6 +38,12 @@ jobs:
 
             # 获取文件最后修改时间
             LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE")
+
+            # 如果 git log 为空（首次提交或文件未修改），使用当前时间
+            if [ -z "$LAST_MOD" ]; then
+              LAST_MOD=$(date +"%Y-%m-%d %H:%M")
+            fi
+
             TIMESTAMP="⟦$LAST_MOD⟧"
 
             # 替换占位符
@@ -53,12 +58,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 只有有改动才 commit
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
             git commit -m "🕒 Auto update file timestamps"
-            # 推送当前分支
             BRANCH=$(git rev-parse --abbrev-ref HEAD)
             git push origin "$BRANCH" || echo "Push failed, maybe branch protected"
-          fi
