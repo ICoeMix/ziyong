@@ -1131,11 +1131,6 @@ function SCP2QX(subs) {
           //xx - 302 $1$2$3
           rw = subs[i].replace(" - "," url ")
           nrw.push(rw)
-          // ✅✅✅【新增补丁段：识别 Surge data-type/data 规则】✅✅✅
-        } else if (subs[i].indexOf("data-type=") != -1 && subs[i].indexOf("data=") != -1) {
-          var ptn = subs[i].split(" ")[0]; // 正则部分
-          rw = ptn + " url script-response-body empty_body.js";
-          nrw.push(rw);
         } else if(subs[i].split(" ")[2] == "header") { // rewrite header 类型
           var pget = subs[i].split(" ")[0].split(".com")[1]
           var pgetn = subs[i].split(" ")[1].split(".com")[1]
