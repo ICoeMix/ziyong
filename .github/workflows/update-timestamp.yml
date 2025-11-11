@@ -11,41 +11,28 @@ jobs:
   update-timestamps:
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ 拉取完整仓库
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2️⃣ 安装 Python
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      # 3️⃣ 获取自上次提交以来变动的文件
-      - name: Get changed files
-        id: changes
-        run: |
-          files=$(git diff --name-only origin/main..HEAD | grep -E '\.(py|js|ts|c|cpp|go|md|java)$' || true)
-          echo "files=$files" >> $GITHUB_OUTPUT
-
-      # 4️⃣ 更新改动文件里的时间戳
       - name: Update timestamps
         run: |
-          if [ -n "${{ steps.changes.outputs.files }}" ]; then
-            pip install --upgrade pip
-            python update_timestamp.py ${{ steps.changes.outputs.files }}
+          # 获取自上次提交以来改动的目标文件
+          files=$(git diff --name-only origin/main..HEAD | grep -E '\.(py|js|ts|c|cpp|go|md|java)$' || true)
+          if [ -n "$files" ]; then
+            python update_timestamp.py $files
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add $files
+            git diff --cached --quiet || (
+              git commit -m "🕒 Auto update timestamps [skip ci]"
+              git pull origin main --rebase
+              git push origin main
+            )
           else
             echo "No relevant files changed."
           fi
-
-      # 5️⃣ 提交修改
-      - name: Commit & Push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
-          git diff --cached --quiet || (
-            git commit -m "🕒 Auto update timestamps [skip ci]"
-            git pull origin main --rebase
-            git push origin main
-          )
