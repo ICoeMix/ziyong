@@ -11,7 +11,7 @@ jobs:
   update-timestamps:
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ 拉取仓库完整历史
+      # 1️⃣ 拉取完整仓库
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -21,21 +21,19 @@ jobs:
         with:
           python-version: '3.x'
 
-      # 3️⃣ 找到自上次提交以来变动的文件
+      # 3️⃣ 获取自上次提交以来变动的文件
       - name: Get changed files
         id: changes
         run: |
-          git fetch origin main
-          git diff --name-only origin/main..HEAD > changed.txt
-          grep -E '\.(py|js|ts|c|cpp|go|md|java)$' changed.txt > files_to_update.txt || true
-          echo "files=$(cat files_to_update.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          files=$(git diff --name-only origin/main..HEAD | grep -E '\.(py|js|ts|c|cpp|go|md|java)$' || true)
+          echo "files=$files" >> $GITHUB_OUTPUT
 
       # 4️⃣ 更新改动文件里的时间戳
       - name: Update timestamps
         run: |
-          if [ -s files_to_update.txt ]; then
+          if [ -n "${{ steps.changes.outputs.files }}" ]; then
             pip install --upgrade pip
-            xargs python update_timestamp.py < files_to_update.txt
+            python update_timestamp.py ${{ steps.changes.outputs.files }}
           else
             echo "No relevant files changed."
           fi
