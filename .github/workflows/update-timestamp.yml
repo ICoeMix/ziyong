@@ -1,34 +1,50 @@
-name: Update Timestamp
+name: Update File Timestamps
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]  # 或 master
 
 jobs:
-  update:
+  update-timestamps:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      # 1️⃣ 拉取仓库代码
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check if target file changed
-        id: check
+      # 2️⃣ 查找所有含有 ⟦TIMESTAMP⟧ 的文件
+      - name: Find files with timestamp placeholder
+        id: find_files
         run: |
-          # 检查 push 里这个文件是否有修改
-          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q "^script.js$"; then
-            echo "file_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "file_changed=false" >> $GITHUB_OUTPUT
-          fi
+          FILES=$(grep -rl '⟦TIMESTAMP⟧' .)
+          echo "files=$FILES" >> $GITHUB_OUTPUT
 
-      - name: Update timestamp if file changed
-        if: steps.check.outputs.file_changed == 'true'
+      # 3️⃣ 更新时间戳
+      - name: Update timestamps
         run: |
-          TIMESTAMP=$(date +"⟦%Y-%m-%d %H:%M⟧")
-          echo "当前时间: $TIMESTAMP"
-          sed -i "s/资源解析器 ©𝐒𝐡𝐚𝐰𝐧\s*⟦[0-9:\- ]*⟧/资源解析器 ©𝐒𝐡𝐚𝐰𝐧  $TIMESTAMP/g" script.js
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add script.js
-          git commit -m "🕒 Auto update timestamp"
-          git push
+          for FILE in ${{ steps.find_files.outputs.files }}; do
+            # 检查文件是否被修改过
+            if git diff --quiet "$FILE"; then
+              echo "$FILE not modified, skip"
+              continue
+            fi
+
+            # 获取文件最后修改的日期
+            LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE")
+            TIMESTAMP="⟦$LAST_MOD⟧"
+
+            # 替换占位符
+            sed -i "s/⟦TIMESTAMP⟧/$TIMESTAMP/g" "$FILE"
+
+            # 添加到暂存区
+            git add "$FILE"
+            echo "Updated timestamp for $FILE -> $TIMESTAMP"
+          done
+
+          # 如果有修改才提交
+          git diff --cached --quiet || {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "🕒 Auto update file timestamps"
+            git push
+          }
