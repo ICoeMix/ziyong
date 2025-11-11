@@ -2,61 +2,52 @@ name: Update File Timestamps
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]  # 或者 master
 
 jobs:
   update-timestamps:
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ 拉取完整仓库历史
+      # 1️⃣ 拉取完整仓库历史，保证 git log 可用
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2️⃣ 查找包含 ⟦TIMESTAMP⟧ 的文件
-      - name: Find files with timestamp placeholder
-        id: find_files
+      # 2️⃣ 设置 Git 用户信息
+      - name: Setup Git user
         run: |
-          FILES=$(grep -rl --include=\*.{js,ts} '⟦TIMESTAMP⟧' . || true)
-          echo "files=$FILES" >> $GITHUB_OUTPUT
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # 3️⃣ 替换占位符
-      - name: Replace placeholders safely
+      # 3️⃣ 更新占位符，只针对修改过的文件
+      - name: Update timestamps for modified files
         run: |
-          FILES="${{ steps.find_files.outputs.files }}"
-          if [ -z "$FILES" ]; then
-            echo "No files with timestamp placeholder found. Skipping."
-            exit 0
-          fi
-
-          echo "$FILES" | tr ' ' '\n' | while IFS= read -r FILE; do
-            # 文件不存在就跳过
+          # 获取这次 commit 修改的文件
+          git diff --name-only HEAD~1 HEAD | while IFS= read -r FILE; do
             [ ! -f "$FILE" ] && continue
+            grep -q '⟦TIMESTAMP⟧' "$FILE" || continue
 
-            # 获取 Git 最后修改时间
+            # 获取最后修改时间，如果为空用当前时间
             LAST_MOD=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' -- "$FILE")
-
-            # 文件没有历史就用当前时间
             [ -z "$LAST_MOD" ] && LAST_MOD=$(date +"%Y-%m-%d %H:%M")
+
             TIMESTAMP="⟦$LAST_MOD⟧"
 
             # 替换占位符
             sed -i "s/⟦TIMESTAMP⟧/$TIMESTAMP/g" "$FILE"
 
+            # 添加到暂存区
             git add "$FILE"
             echo "Updated $FILE -> $TIMESTAMP"
           done
 
-      # 4️⃣ 提交更改
+      # 4️⃣ 提交修改
       - name: Commit and push
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           if git diff --cached --quiet; then
-            echo "No changes to commit."
+            echo "No timestamp updates needed."
           else
-            git commit -m "🕒 Auto update file timestamps"
+            git commit -m "🕒 Auto update timestamps for modified files"
             BRANCH=$(git rev-parse --abbrev-ref HEAD)
             git push origin "$BRANCH" || echo "Push failed, maybe branch protected"
