@@ -11,17 +11,24 @@ def update_file(filename):
         with open(filename, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        # 只替换已有的 ⟦TIMESTAMP⟧ 格式
-        new_content = timestamp_pat.sub(f'⟦{now}⟧', content)
+        # 如果文件里已有时间戳，就替换
+        if timestamp_pat.search(content):
+            new_content = timestamp_pat.sub(f'⟦{now}⟧', content)
+        else:
+            # 没有时间戳就加在开头
+            new_content = f'⟦{now}⟧\n{content}'
 
-        # 如果内容有变化，写回文件
         if new_content != content:
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(new_content)
             print(f"Updated timestamp in: {filename}")
+        else:
+            print(f"No change needed for: {filename}")
+
     except Exception as e:
         print(f"Error processing {filename}: {e}")
 
 if __name__ == "__main__":
+    # sys.argv[1:] 是文件列表
     for file in sys.argv[1:]:
         update_file(file)
