@@ -2869,7 +2869,7 @@ function SVmess2QX(content) {
         pobfs = ""
     }
     var puri = paraCheck(cnt, "ws-path") != "false" ? "obfs-uri=" + cnt.split("ws-path")[1].split(",")[0].split("=")[1].trim() : "obfs-uri=/"
-    var phost = cnt.indexOf("ws-headers") != -1 ? "obfs-host=" + cnt.split("ws-headers")[1].split(",")[0].split("=")[1].split(":")[1].trim() : "";
+    var phost = cnt.indexOf("ws-headers") != -1 ? "obfs-host=" + cnt.split("ws-headers")[1].split(",")[0].split("=")[1].split(":")[1].trim().replace(/^["']|["']$/g,"") : "";
     if (pobfs.indexOf("ws" || "wss") != -1) {
         if (phost != "") {
             pobfs = pobfs + ", " + puri + ", " + phost
@@ -2902,6 +2902,7 @@ function paraCheck(content, para) {
 //surge中 trojan 类型转换
 function Strojan2QX(content) {
   var cnt = content;
+  cnt = cnt.replace(/password\s*=\s*["']([^"']+)["']/i, 'password=$1');
   var tag = "tag=" + cnt.split("=")[0].trim();
   var ipport = cnt.split(",")[1].trim() + ":" + cnt.split(",")[2].trim();
   var pwd = "password=" + cnt.split("password")[1].split(",")[0].split("=")[1].trim();
