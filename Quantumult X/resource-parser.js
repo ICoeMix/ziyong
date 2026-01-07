@@ -2903,6 +2903,7 @@ function paraCheck(content, para) {
 //surge中 trojan 类型转换
 function Strojan2QX(content) {
   var cnt = content;
+  cnt = cnt.replace(/password\s*=\s*["']([^"']+)["']/i, 'password=$1');
   var tag = "tag=" + cnt.split("=")[0].trim();
   var ipport = cnt.split(",")[1].trim() + ":" + cnt.split(",")[2].trim();
   var pwd = "password=" + cnt.split("password")[1].split(",")[0].split("=")[1].trim();
