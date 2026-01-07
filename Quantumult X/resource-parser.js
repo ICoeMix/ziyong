@@ -1061,7 +1061,6 @@ function URX2QX(subs) {
                 rw = Mock2QXReject(subs[i], fn)
             } else {
                 let filepath = subs[i].split("data=")[1].split(" ")[0].replace(/\"/g,"").replace(/ /g,"");
-                rw = subs[i].replace(/ /g, "").split("data=")[0].split("data-type=")[0].replace(/\"/g,"") + " url echo-response text/html echo-response " + subs[i].split("data=")[1].split(" ")[0].replace(/\"/g,"").replace(/ /g, "")//"reject-dict"
                 // 如果路径为空，默认用 null.html
                 if (!filepath || filepath === "{}" || filepath.trim() === "") {
                   filepath = "https://raw.githubusercontent.com/ICoeMix/ziyong/refs/heads/main/Quantumult%20X/null.html"; 
@@ -2870,7 +2869,7 @@ function SVmess2QX(content) {
         pobfs = ""
     }
     var puri = paraCheck(cnt, "ws-path") != "false" ? "obfs-uri=" + cnt.split("ws-path")[1].split(",")[0].split("=")[1].trim() : "obfs-uri=/"
-    var phost = cnt.indexOf("ws-headers") != -1 ? "obfs-host=" + cnt.split("ws-headers")[1].split(",")[0].split("=")[1].split(":")[1].trim().replace(/^["']|["']$/g,"") : "";
+    var phost = cnt.indexOf("ws-headers") != -1 ? "obfs-host=" + cnt.split("ws-headers")[1].split(",")[0].split("=")[1].split(":")[1].trim() : "";
     if (pobfs.indexOf("ws" || "wss") != -1) {
         if (phost != "") {
             pobfs = pobfs + ", " + puri + ", " + phost
@@ -2903,7 +2902,6 @@ function paraCheck(content, para) {
 //surge中 trojan 类型转换
 function Strojan2QX(content) {
   var cnt = content;
-  cnt = cnt.replace(/password\s*=\s*["']([^"']+)["']/i, 'password=$1');
   var tag = "tag=" + cnt.split("=")[0].trim();
   var ipport = cnt.split(",")[1].trim() + ":" + cnt.split(",")[2].trim();
   var pwd = "password=" + cnt.split("password")[1].split(",")[0].split("=")[1].trim();
@@ -3047,7 +3045,7 @@ function YAMLFix(cnt){
     cnt = cnt.replace(/(^|\n)- /g, "$1  - ").replace(/    - /g,"  - ").replace(/:(?!\s)/g,": ").replace(/\,\"/g,", \"").replace(/: {/g, ": {,   ").replace(/, (Host|host|path|mux)/g,",   $1")
     //2022-04-11 remove tls|skip from replace(/, (Host|host|path|mux)/g,",   $1")
     console.log("1st:\n"+cnt)
-    cnt = cnt.replace(/{\s*name: (.*?), (.*?):/g,"{name: \"$1\", $2:") //cnt.replace(/{\s*name: /g,"{name: \"").replace(/, (.*?):/,"\", $1:")
+    cnt = cnt.replace(/{\s*name: (.*?), (.*?):/g,"{name: \"$1\", $2:").replace(/, short-id/gi,",    short-id") //cnt.replace(/{\s*name: /g,"{name: \"").replace(/, (.*?):/,"\", $1:")
     cnt = cnt.replace(/{\s*|\s*}/g,"").replace(/,/g,"\n   ")
   }
   cnt = cnt.replace(/\n\s*\-\s*\n.*name/g,"\n  - name").replace(/\$|\`/g,"").split("proxy-providers:")[0].split("proxy-groups:")[0].replace(/\"(name|type|server|port|cipher|password|uuid|alterId|udp)(\"*)/g,"$1")
@@ -3122,6 +3120,8 @@ function Clash2QX(cnt) {
         node = CH2QX(node)
       } else if (typecc == "socks5"){
         node = CS52QX(node)
+      } else if (typecc == "vless"){
+        node = CVL2QX(node)
       }
       node = Pudp0 != 0 ? XUDP(node,Pudp0) : node
       node = Ptfo0 != 0 ? XTFO(node,Ptfo0) : node
@@ -3299,6 +3299,44 @@ function CS52QX(cnt){
     return node
 }
 
+// clash vless type ,2026-01-07
+function CVL2QX(cnt){
+  tag = "tag="+cnt.name.replace(/\\U.+?\s{1}/gi," ").replace(/(\"|\')/gi,"")
+  ipt = cnt.server+":"+cnt.port
+  pwd = "password=" + cnt.uuid
+  mtd = "method=none" //cnt.cipher
+  udp = cnt.udp ? "udp-relay=true" : "udp-relay=false"
+  tfo = cnt.tfo ? "fast-open=true" : "fast-open=false"
+  obfs = ""
+  if (cnt.network == "ws" && cnt.tls) {
+    obfs = "obfs=wss"
+  } else if (cnt.network == "ws"){
+    obfs = "obfs=ws"
+  } else if (cnt.tls){
+    obfs = "obfs=over-tls"
+  }
+  vfl=cnt.flow? "vless-flow=xtls-rprx-vision":""
+  const ppbk=getValue(()=>cnt["reality-opts"]["public-key"]) 
+  const psid=getValue(()=>cnt["reality-opts"]["short-id"])
+  pbk=ppbk? "reality-base64-pubkey="+ppbk : ""
+  sid=psid? "reality-hex-shortid="+psid : ""
+//  console.log(obfs)
+  const phost = getValue(()=>cnt["ws-opts"]["headers"]["Host"]) 
+  ohost = cnt["ws-headers"]? "obfs-host=" + cnt["ws-headers"]["Host"] : ""
+  ohost = phost ? "obfs-host="+phost : ohost
+  //ohost= cnt["ws-opts"]? "obfs-host=" + cnt["ws-opts"]["headers"]["Host"] : ohost
+  ohost = cnt["servername"]? "obfs-host=" + cnt["servername"] : ohost
+  cert = cnt["skip-cert-verify"] && cnt.tls ? "tls-verification=false" : ""
+  //$notify(cert)
+  if (Pcert0 == 1 && cnt.tls) {
+    cert = "tls-verification=true"
+  } else if (Pcert0 != 1 && cnt.tls) {
+    cert = "tls-verification=false"
+  }
+  node = "vless="+[ipt, pwd, mtd, udp, tfo, obfs, ohost, vfl, pbk, sid, cert, tag].filter(Boolean).join(", ")
+  //console.log(node)
+  return node
+}
 
 // UDP/TFO 参数 (强制 surge/quanx 类型转换)
 function XUDP(cnt,pudp) {
