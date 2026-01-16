@@ -1043,42 +1043,85 @@ function URX2QX(subs) {
     var nrw = []
     var rw = ""
     subs = subs.split("\n")
-    //$notify("URX")
-    var NoteK = ["//", "#", ";"];  //排除注释项
+
+    var NoteK = ["//", "#", ";"];  // 排除注释项
+
+    // 🔧 修复：正确判断是否存在 [Map Local]
+    var hasMapLocal = subs.some(line => /^\s*\[Map Local\]/.test(line))
+
     for (var i = 0; i < subs.length; i++) {
+
         const notecheck = (item) => subs[i].indexOf(item) == 0
-        if (!NoteK.some(notecheck)) {
+        if (NoteK.some(notecheck)) continue
+
         if (subs[i].slice(0, 9) == "URL-REGEX") {  // regex 类型
-          if (subs[i].indexOf("REJECT") != -1 || subs[i].split(",").length == 2 ) { // 仅处理 reject 类型，或者无指定策略类型
-            if (subs[i].replace(/ /g, "").split(",REJECT")[0].split("GEX,")[1].slice(0,1) != "*") { // 部分 * 开头的不支持 url-regex形式
-            rw = subs[i].replace(/ /g, "").split(",REJECT")[0].split("GEX,")[1] + " url " + "reject-200"
-            nrw.push(rw)
-          }
-          }
-        } else if (subs[i].indexOf("data=") != -1 && subs.indexOf("[Map Local]") != -1){ // Map Local 类型
-            // 取subs[i]的文件名
-            let fn = subs[i].match(/data=.+\/(.+)"/) ? subs[i].match(/data=.+\/(.+)"/)[1] : null
-            if ((!/header=".*content-type/i.test(subs[i]) && /blank/i.test(fn)) || fn==null) {
-                rw = Mock2QXReject(subs[i], fn)
-            } else {
-                let filepath = subs[i].split("data=")[1].split(" ")[0].replace(/\"/g,"").replace(/ /g,"");
-                // 如果路径为空，默认用 null.html
-                if (!filepath || filepath === "{}" || filepath.trim() === "") {
-                  filepath = "https://raw.githubusercontent.com/ICoeMix/ziyong/refs/heads/main/Quantumult%20X/null.html"; 
-                }
-                rw = subs[i].replace(/ /g, "").split("data=")[0].split("data-type=")[0].replace(/\"/g,"") + " url echo-response text/html echo-response " + subs[i].split("data=")[1].split(" ")[0].replace(/\"/g,"").replace(/ /g, "")//"reject-dict"
-                if (subs[i].indexOf("header=")!=-1) {
-                    if (subs[i].indexOf("Content-Type:") !=-1) {
-                        let tpe = subs[i].split("header=")[1].split("Content-Type:")[1].split(",")[0].replace(/\"/g,"")
-                        rw = rw.replace(/text\/html/g,tpe)
-                    }
+
+            if (subs[i].indexOf("REJECT") != -1 || subs[i].split(",").length == 2) {
+
+                // 🔧 修复：防止 split 取不到导致报错
+                let tmp = subs[i].replace(/ /g, "").split(",REJECT")[0].split("GEX,")
+                if (!tmp[1]) continue
+
+                // 🔧 修复：避免 undefined.slice()
+                if (tmp[1].slice(0, 1) != "*") {
+                    rw = tmp[1] + " url reject-200"
+                    nrw.push(rw)
                 }
             }
+
+        } else if (subs[i].indexOf("data=") != -1 && hasMapLocal) { // Map Local 类型
+
+            // 🔧 修复：fn 为 null 时不能直接 test
+            let fnMatch = subs[i].match(/data=.+\/(.+)"/)
+            let fn = fnMatch ? fnMatch[1] : null
+
+            if (
+                fn === null ||
+                (!/header=".*content-type/i.test(subs[i]) && /blank/i.test(fn))
+            ) {
+
+                // 🔧 修复：Mock2QXReject 不存在时不报错
+                if (typeof Mock2QXReject === "function") {
+                    rw = Mock2QXReject(subs[i], fn)
+                } else {
+                    continue
+                }
+
+            } else {
+
+                let filepath = subs[i]
+                    .split("data=")[1]
+                    .split(" ")[0]
+                    .replace(/\"/g, "")
+                    .replace(/ /g, "")
+
+                // 🔧 修复：路径为空兜底
+                if (!filepath || filepath === "{}" || filepath.trim() === "") {
+                    filepath = "https://raw.githubusercontent.com/ICoeMix/ziyong/refs/heads/main/Quantumult%20X/null.html"
+                }
+
+                rw = subs[i]
+                    .replace(/ /g, "")
+                    .split("data=")[0]
+                    .split("data-type=")[0]
+                    .replace(/\"/g, "") +
+                    " url echo-response text/html echo-response " +
+                    filepath
+
+                if (subs[i].indexOf("header=") != -1 && subs[i].indexOf("Content-Type:") != -1) {
+                    let tpe = subs[i]
+                        .split("header=")[1]
+                        .split("Content-Type:")[1]
+                        .split(",")[0]
+                        .replace(/\"/g, "")
+                    rw = rw.replace(/text\/html/g, tpe)
+                }
+            }
+
             nrw.push(rw)
-        } 
+        }
     }
-    }
-    //$notify("URX","",nrw)
+
     return nrw
 }
 
