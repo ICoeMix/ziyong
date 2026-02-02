@@ -11,7 +11,7 @@ for (let year = currentYear; year >= 1940; year--) {
 }
 
 var WidgetMetadata = {
-    id: "bangumi-tmdb_v3",
+    id: "bangumitmdb_v3",
     title: "Bangumi 热门榜单",
     description: "获取Bangumi近期热门、每日放送数据，支持榜单筛选。",
     version: "3.1.0",
