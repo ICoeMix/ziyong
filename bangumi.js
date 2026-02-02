@@ -1,20 +1,21 @@
 // --- 核心配置 ---
-const BASE_DATA_URL = "https://raw.githubusercontent.com/opix-maker/Forward/main";
-const RECENT_DATA_URL = `${BASE_DATA_URL}/recent_data.json`;
+const BASE_DATA_URL = "https://forward.mobio.workers.dev/";
+const RECENT_DATA_URL = `${BASE_DATA_URL}/data/bangumi_recent_hot_processed.json`;
 
 // --- 动态年份生成 ---
 const currentYear = new Date().getFullYear();
+const startYear = 2025; 
 const yearOptions = [];
 for (let year = currentYear; year >= 1940; year--) { 
     yearOptions.push({ title: `${year}`, value: `${year}` });
 }
 
 var WidgetMetadata = {
-    id: "bangumi-tmdb_v3_fast",
-    title: "Bangumi 热门榜单 (极速版)",
-    description: "优化请求策略，大幅提升加载速度。强制横版封面，包含 genre_ids。",
-    version: "3.3.0",
-    author: "ICoeMix(Optimized)",
+    id: "bangumi-tmdb_v3",
+    title: "Bangumi 热门榜单",
+    description: "获取Bangumi热门及每日放送，强制过滤无横版封面(Backdrop)的内容，补全分类ID。",
+    version: "3.2.0",
+    author: "ICoeMix(Optimized by ChatGPT)",
     site: "https://github.com/ICoeMix/Forward-Widget",
     requiredVersion: "0.0.1",
     detailCacheDuration: 6000,
@@ -24,10 +25,10 @@ var WidgetMetadata = {
             description: "按作品类型浏览近期热门 (需有横版封面)",
             requiresWebView: false,
             functionName: "fetchRecentHot",
-            cacheDuration: 300000, // 热门数据缓存 5分钟
+            cacheDuration: 500000,
             params: [
                 { name: "category", title: "分类", type: "enumeration", value: "anime", enumOptions: [ { title: "动画", value: "anime" } ] },
-                { name: "pages", title: "页码范围", type: "input", value: "1", description: "建议只填 1，页数越多速度越慢" },
+                { name: "pages", title: "页码范围", type: "input", value: "1", description: "如 1 或 1-3" },
                 {
                     name: "sort", title: "排序方式", type: "enumeration", value: "default",
                     enumOptions: [ { title: "默认", value: "default" }, { title: "发行时间", value: "date" }, { title: "评分", value: "score" } ]
@@ -50,7 +51,7 @@ var WidgetMetadata = {
         },
         {
             title: "每日放送",
-            description: "查看每日更新 (速度优化版)",
+            description: "查看每日更新 (需有横版封面)",
             requiresWebView: false,
             functionName: "fetchDailyCalendarApi",
             cacheDuration: 20000,
@@ -78,18 +79,15 @@ let globalData = null;
 let dataFetchPromise = null;
 const archiveFetchPromises = {};
 
-// 获取并缓存全局数据
+// 获取并缓存全局数据 (保持不变)
 async function fetchAndCacheGlobalData() {
     if (globalData) return globalData;
     if (dataFetchPromise) return await dataFetchPromise;
     dataFetchPromise = (async () => {
         try {
-            // 尝试获取在线数据，失败则初始化空对象，避免整个组件崩溃
-            const response = await Widget.http.get(RECENT_DATA_URL, { headers: { 'Cache-Control': 'no-cache' } }).catch(()=>({data:{}}));
-            globalData = response.data || {};
-            globalData.dynamic = globalData.dynamic || {};
-            globalData.airtimeRanking = globalData.airtimeRanking || {};
-            globalData.recentHot = globalData.recentHot || {};
+            const response = await Widget.http.get(RECENT_DATA_URL, { headers: { 'Cache-Control': 'no-cache' } });
+            globalData = response.data;
+            globalData.dynamic = {};
             return globalData;
         } catch (e) {
             globalData = { airtimeRanking: {}, recentHot: {}, dailyCalendar: {}, dynamic: {} };
@@ -104,8 +102,7 @@ const DynamicDataProcessor = (() => {
     class Processor {
         static BGM_BASE_URL = "https://bgm.tv";
         static TMDB_ANIMATION_GENRE_ID = 16; 
-        // 优化1: 提高并发数，从 8 提到 15，加快批量查询速度
-        static MAX_CONCURRENT_DETAILS_FETCH = 15; 
+        static MAX_CONCURRENT_DETAILS_FETCH = 8; 
         static tmdbCache = new Map(); 
 
         static normalizeTmdbQuery(query) { 
@@ -116,6 +113,7 @@ const DynamicDataProcessor = (() => {
         }
 
         static parseDate(dateStr) { 
+            // 简单的日期解析
             if (!dateStr) return '';
             let match = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/); 
             if (match) return `${match[1]}-${String(match[2]).padStart(2, '0')}-${String(match[3]).padStart(2, '0')}`;
@@ -126,6 +124,7 @@ const DynamicDataProcessor = (() => {
             return '';
         }
 
+        // TMDB 搜索评分算法
         static scoreTmdbResult(result, query, validYear) {
             let score = 0;
             const resultTitle = Processor.normalizeTmdbQuery(result.title || result.name);
@@ -140,6 +139,7 @@ const DynamicDataProcessor = (() => {
             return score;
         }
 
+        // TMDB 搜索函数
         static async searchTmdb(originalTitle, chineseTitle, year) {
             const cacheKey = `${originalTitle}-${chineseTitle}-${year}`;
             if (Processor.tmdbCache.has(cacheKey)) return Processor.tmdbCache.get(cacheKey);
@@ -149,69 +149,84 @@ const DynamicDataProcessor = (() => {
             const query = chineseTitle || originalTitle;
             
             try {
-                // 优化2: 使用 Promise.race 增加简单的超时机制 (3秒)，防止某个卡死的请求拖慢整体
-                const fetchPromise = Widget.tmdb.get(`/search/tv`, { 
+                // 优先搜 TV
+                const response = await Widget.tmdb.get(`/search/tv`, { 
                     params: { query, language: "zh-CN", include_adult: false, first_air_date_year: year } 
                 });
-                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
-                
-                const response = await Promise.race([fetchPromise, timeoutPromise]);
                 
                 const results = response?.results || [];
                 for (const result of results) {
+                    // 必须包含动画分类 (16)
                     if (result.genre_ids && !result.genre_ids.includes(Processor.TMDB_ANIMATION_GENRE_ID)) continue;
+                    
                     const score = Processor.scoreTmdbResult(result, query, year);
                     if (score > maxScore) {
                         maxScore = score;
                         bestMatch = result;
                     }
                 }
-            } catch (err) { 
-                // 超时或失败忽略
-            }
+            } catch (err) { console.error(err); }
 
             Processor.tmdbCache.set(cacheKey, bestMatch);
             return bestMatch;
         }
 
+        // 详情获取与合并 (核心修改处)
         static async fetchItemDetails(item, category) {
-            const yearMatch = item.info?.match(/(\d{4})/) || [];
-            const year = yearMatch[1] || '';
+            const yearMatch = item.info.match(/(\d{4})/);
+            const year = yearMatch ? yearMatch[1] : '';
             
+            // 基础对象 (Bangumi 数据)
             const baseItem = {
-                id: item.id, type: "link", title: item.title,
-                posterPath: item.cover, backdropPath: null,
+                id: item.id, 
+                type: "link", 
+                title: item.title,
+                posterPath: item.cover, // 初始为 Bangumi 竖版封面
+                backdropPath: null,     // Bangumi 通常没有横版
                 releaseDate: Processor.parseDate(item.info),
-                mediaType: category, rating: item.rating, description: item.info,
+                mediaType: category, 
+                rating: item.rating,
+                description: item.info, 
                 link: `${Processor.BGM_BASE_URL}/subject/${item.id}`,
-                genre_ids: [] 
+                genre_ids: [] // 初始化为空，等待 TMDB 填充
             };
 
+            // 必须查询 TMDB (为了获取 genre_ids 和 backdropPath)
             const tmdbResult = await Processor.searchTmdb(item.title, null, year);
             
             if (tmdbResult) {
                 baseItem.id = String(tmdbResult.id);
                 baseItem.type = "tmdb";
                 baseItem.title = tmdbResult.name || tmdbResult.title || baseItem.title;
+                
+                // 设置图片
                 baseItem.posterPath = tmdbResult.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbResult.poster_path}` : baseItem.posterPath;
                 baseItem.backdropPath = tmdbResult.backdrop_path ? `https://image.tmdb.org/t/p/w780${tmdbResult.backdrop_path}` : null;
+                
+                // 设置其他元数据
                 baseItem.releaseDate = tmdbResult.first_air_date || tmdbResult.release_date || baseItem.releaseDate;
                 baseItem.rating = tmdbResult.vote_average ? tmdbResult.vote_average.toFixed(1) : baseItem.rating;
                 baseItem.description = tmdbResult.overview || baseItem.description;
-                baseItem.link = null; 
+                baseItem.link = null; // 转为 tmdb 类型后 link 置空
                 baseItem.tmdb_id = String(tmdbResult.id);
                 baseItem.tmdb_origin_countries = tmdbResult.origin_country || [];
                 
-                // 【关键点】: 确认 genre_ids 赋值
+                // --- 关键修正：确保 genre_ids 被赋值 ---
                 baseItem.genre_ids = tmdbResult.genre_ids || []; 
             }
 
-            // 【关键点】: 无横版封面(backdropPath) 则直接丢弃
-            if (!baseItem.backdropPath) return null;
+            // --- 核心过滤逻辑 ---
+            // 规则：查询完 TMDB 后，如果没有 backdropPath (横版)，则丢弃。
+            if (!baseItem.backdropPath) {
+                // 也可以加一个判断：如果 posterPath 也没有，肯定丢弃。
+                // 如果 posterPath 有但 backdropPath 没有，根据你的要求也是丢弃。
+                return null;
+            }
 
             return baseItem;
         }
 
+        // Bangumi 网页解析
         static async processBangumiPage(url, category) {
             try {
                 const listHtmlResp = await Widget.http.get(url);
@@ -231,11 +246,13 @@ const DynamicDataProcessor = (() => {
                 });
 
                 const results = [];
+                // 并发获取详情并过滤
                 for (let i = 0; i < pendingItems.length; i += Processor.MAX_CONCURRENT_DETAILS_FETCH) {
                     const batch = pendingItems.slice(i, i + Processor.MAX_CONCURRENT_DETAILS_FETCH);
                     const promises = batch.map(item => Processor.fetchItemDetails(item, category));
                     const settled = await Promise.allSettled(promises);
                     settled.forEach(res => {
+                        // 过滤掉返回 null 的项目 (即没有横版封面的)
                         if (res.status === 'fulfilled' && res.value !== null) {
                             results.push(res.value);
                         }
@@ -248,13 +265,11 @@ const DynamicDataProcessor = (() => {
             }
         }
 
-        // 优化3: processDailyCalendar 支持预筛选
-        // 之前的逻辑是：先查所有 TMDB -> 再筛选日期 (极其浪费)
-        // 现在的逻辑是：先筛选日期 -> 再查 TMDB (极速)
-        static async processDailyCalendar(targetBgmIds = null) {
+        // 每日放送逻辑
+        static async processDailyCalendar() {
             try {
                 const apiResponse = await Widget.http.get("https://api.bgm.tv/calendar");
-                let allItems = [];
+                const allItems = [];
                 apiResponse.data.forEach(dayData => {
                     if (dayData.items) {
                         dayData.items.forEach(item => {
@@ -264,24 +279,26 @@ const DynamicDataProcessor = (() => {
                     }
                 });
 
-                // 【提速核心】：如果在请求 TMDB 之前就能过滤掉不需要的日期，可以减少 6/7 的请求量
-                if (targetBgmIds) {
-                    allItems = allItems.filter(item => targetBgmIds.has(item.bgm_weekday_id));
-                }
-
                 const enhancedItems = [];
                 for (let i = 0; i < allItems.length; i += Processor.MAX_CONCURRENT_DETAILS_FETCH) {
                     const batch = allItems.slice(i, i + Processor.MAX_CONCURRENT_DETAILS_FETCH);
                     const promises = batch.map(async (item) => {
                         const baseItem = {
-                            id: String(item.id), type: "link", title: item.name_cn || item.name,
+                            id: String(item.id), 
+                            type: "link", 
+                            title: item.name_cn || item.name,
                             posterPath: item.images?.large?.startsWith('//') ? 'https:' + item.images.large : item.images?.large,
-                            backdropPath: null, 
-                            releaseDate: item.air_date, mediaType: 'anime', rating: item.rating?.score?.toFixed(1) || "N/A",
-                            description: item.summary || '', link: item.url, 
-                            bgm_id: String(item.id), bgm_score: item.rating?.score || 0,
-                            bgm_rating_total: item.rating?.total || 0, bgm_weekday_id: item.bgm_weekday_id,
-                            genre_ids: [] 
+                            backdropPath: null, // 初始化无横图
+                            releaseDate: item.air_date, 
+                            mediaType: 'anime', 
+                            rating: item.rating?.score?.toFixed(1) || "N/A",
+                            description: item.summary || '',
+                            link: item.url, 
+                            bgm_id: String(item.id), 
+                            bgm_score: item.rating?.score || 0,
+                            bgm_rating_total: item.rating?.total || 0, 
+                            bgm_weekday_id: item.bgm_weekday_id,
+                            genre_ids: [] // 初始化
                         };
 
                         const tmdbResult = await Processor.searchTmdb(item.name, item.name_cn, item.air_date?.substring(0, 4));
@@ -298,11 +315,11 @@ const DynamicDataProcessor = (() => {
                             baseItem.link = null;
                             baseItem.tmdb_id = String(tmdbResult.id);
                             baseItem.tmdb_origin_countries = tmdbResult.origin_country || [];
-                            // 【关键点】: 确认 genre_ids 赋值
+                            // --- 补全 genre_ids ---
                             baseItem.genre_ids = tmdbResult.genre_ids || [];
                         }
 
-                        // 【关键点】: 无横版丢弃
+                        // --- 核心过滤：必须有 backdropPath (横版) ---
                         if (!baseItem.backdropPath) return null;
 
                         return baseItem;
@@ -324,7 +341,7 @@ const DynamicDataProcessor = (() => {
     return {
         processBangumiPage: Processor.processBangumiPage,
         processDailyCalendar: Processor.processDailyCalendar,
-        searchTmdb: Processor.searchTmdb
+        searchTmdb: Processor.searchTmdb // 暴露给主函数用
     };
 })();
 
@@ -332,57 +349,52 @@ const DynamicDataProcessor = (() => {
 
 // 1. 近期热门
 async function fetchRecentHot(params = {}) {
+    // 1️⃣ 确保全局数据已加载
     await fetchAndCacheGlobalData();
+
     const category = params.category || "anime";
-    
+    const sort = params.sort || "default";
+
+    // 2️⃣ 解析页码参数（支持 1 / 1-3）
     let pageList = [];
     const pageInput = params.pages || "1";
+
     if (pageInput.includes("-")) {
         const [start, end] = pageInput.split("-").map(n => parseInt(n, 10));
-        for (let i = start; i <= end; i++) pageList.push(i);
+        for (let i = start; i <= end; i++) {
+            if (!isNaN(i)) pageList.push(i);
+        }
     } else {
-        pageList.push(parseInt(pageInput, 10));
+        const p = parseInt(pageInput, 10);
+        if (!isNaN(p)) pageList.push(p);
     }
 
+    // 3️⃣ 从 GitHub 处理后的 recentHot 数据中取页
     const pages = globalData.recentHot?.[category] || [];
     let resultList = [];
+
     for (const p of pageList) {
-        if (pages[p - 1]) resultList = resultList.concat(pages[p - 1]);
+        if (pages[p - 1] && Array.isArray(pages[p - 1])) {
+            resultList = resultList.concat(pages[p - 1]);
+        }
     }
 
-    // 缓存数据也要过一遍 TMDB 以获取 backdrop 和 genre_ids
-    const processedList = [];
-    // 并发处理缓存数据的补充
-    const BATCH_SIZE = 15;
-    for(let i=0; i<resultList.length; i+=BATCH_SIZE) {
-        const batch = resultList.slice(i, i+BATCH_SIZE);
-        const promises = batch.map(async (item) => {
-             // 如果已经完美了(有横图且有分类ID)，直接返回
-            if (item.backdropPath && item.genre_ids && item.genre_ids.length > 0) return item;
+    // 4️⃣ 核心逻辑：只保留有横版 backdrop 的项（不再二次 TMDB 处理）
+    let processedList = resultList.filter(item => item && item.backdropPath);
 
-            // 否则重新跑一次 TMDB
-            const tmdbResult = await DynamicDataProcessor.searchTmdb(item.title, null, item.releaseDate?.substring(0,4));
-            if (tmdbResult && tmdbResult.backdrop_path) {
-                item.backdropPath = `https://image.tmdb.org/t/p/w780${tmdbResult.backdrop_path}`;
-                item.genre_ids = tmdbResult.genre_ids || [];
-                item.type = "tmdb";
-                item.id = String(tmdbResult.id); 
-                return item;
-            }
-            return null; 
+    // 5️⃣ 排序逻辑
+    if (sort === "date") {
+        processedList.sort((a, b) => {
+            return new Date(b.releaseDate || 0) - new Date(a.releaseDate || 0);
         });
-        
-        const results = await Promise.allSettled(promises);
-        results.forEach(res => {
-            if(res.status === 'fulfilled' && res.value) processedList.push(res.value);
+    } else if (sort === "score") {
+        processedList.sort((a, b) => {
+            return (b.rating || 0) - (a.rating || 0);
         });
     }
+    // sort === "default"：保持原顺序（即 GitHub 产出顺序）
 
-    // 排序
-    const sort = params.sort || "default";
-    if (sort === "date") processedList.sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
-    else if (sort === "score") processedList.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-
+    // 6️⃣ 返回最终结果
     return processedList;
 }
 
@@ -395,46 +407,53 @@ async function fetchAirtimeRanking(params = {}) {
     const sort = params.sort || "collects";
     const page = parseInt(params.page || "1", 10);
     
+    // 动态模式
     const dynamicKey = `airtime-${category}-${year}-${month}-${sort}-${page}`;
     if (globalData.dynamic[dynamicKey]) return globalData.dynamic[dynamicKey];
 
     const url = `https://bgm.tv/${category}/browser/airtime/${year}/${month}?sort=${sort}&page=${page}`;
+    
+    // 核心调用：Processor 内部已经实现了 "无 backdropPath 则返回 null"
     const listItems = await DynamicDataProcessor.processBangumiPage(url, category);
     
     globalData.dynamic[dynamicKey] = listItems;
     return listItems;
 }
 
-// 3. 每日放送 (逻辑大幅优化)
+// 3. 每日放送
 async function fetchDailyCalendarApi(params = {}) {
     await fetchAndCacheGlobalData();
     
+    // 检查缓存或动态获取
+    let items = globalData.dailyCalendar?.all_week || [];
+    if (!items.length && !archiveFetchPromises['daily']) {
+        // 这里调用的 processDailyCalendar 已经包含了 "无 backdrop 丢弃" 和 "补全 genre_ids"
+        const dynamicItems = await DynamicDataProcessor.processDailyCalendar();
+        if (!globalData.dailyCalendar) globalData.dailyCalendar = {};
+        globalData.dailyCalendar.all_week = dynamicItems;
+        items = dynamicItems;
+    }
+
     const { filterType = "today", specificWeekday = "1", dailyRegionFilter = "all" } = params;
     const JS_DAY_TO_BGM_API_ID = {0:7,1:1,2:2,3:3,4:4,5:5,6:6};
     
-    // 计算需要的 BGM Weekday IDs
-    let targetBgmIds = null;
-    if (filterType !== "all_week") {
-        targetBgmIds = new Set();
+    // 星期过滤
+    let filteredByDay = [];
+    if (filterType === "all_week") filteredByDay = items;
+    else {
         const today = new Date();
+        const targetBgmIds = new Set();
         switch (filterType) {
             case "today": targetBgmIds.add(JS_DAY_TO_BGM_API_ID[today.getDay()]); break;
             case "specific_day": targetBgmIds.add(parseInt(specificWeekday,10)); break;
             case "mon_thu": [1,2,3,4].forEach(id=>targetBgmIds.add(id)); break;
             case "fri_sun": [5,6,7].forEach(id=>targetBgmIds.add(id)); break;
         }
+        filteredByDay = items.filter(item => item.bgm_weekday_id && targetBgmIds.has(item.bgm_weekday_id));
     }
 
-    // 【核心变化】: 将筛选条件传给 processor，在查询 TMDB 之前就过滤，极大提升速度
-    // 注意：这里不再优先读缓存 globalData.dailyCalendar，因为缓存的是全部数据
-    // 如果想利用缓存，逻辑会非常复杂。考虑到速度优化，按需动态获取可能更快。
-    // 但为了兼容性，如果用户选的是 all_week，我们还是可以用缓存逻辑（如果需要的话）。
-    // 这里为了确保逻辑一致性和 genre_ids 的存在，统一重新 fetch 处理。
-    
-    const items = await DynamicDataProcessor.processDailyCalendar(targetBgmIds);
-
-    // 地区过滤 (Region Filter) - 在本地做
-    const finalResults = items.filter(item => {
+    // 地区过滤
+    const finalResults = filteredByDay.filter(item => {
         if (dailyRegionFilter === "all") return true;
         const countries = item.tmdb_origin_countries || [];
         if (dailyRegionFilter === "JP") return countries.includes("JP");
@@ -442,6 +461,6 @@ async function fetchDailyCalendarApi(params = {}) {
         return false;
     });
     
-    // 最终确认 (Double check)
-    return finalResults.filter(item => item.backdropPath && item.genre_ids);
+    // 最终安全检查：再次过滤掉没有 backdropPath 的 (以防缓存数据有问题)
+    return finalResults.filter(item => item.backdropPath);
 }
