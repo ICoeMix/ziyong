@@ -1,6 +1,6 @@
 // --- 核心配置 ---
 const BASE_DATA_URL = "https://forward.mobio.workers.dev";
-const RECENT_DATA_URL = `${BASE_DATA_URL}/data/bangumi_recent_hot_processed.json`;
+const RECENT_DATA_URL = `${BASE_DATA_URL}/data/bangumi_recent_data.json`;
 
 // --- 动态年份生成 ---
 const currentYear = new Date().getFullYear();
