@@ -12,9 +12,9 @@ for (let year = currentYear; year >= 1940; year--) {
 
 var WidgetMetadata = {
     id: "bang_v3",
-    title: "Bangumi 热门榜单",
+    title: "Bangumi",
     description: "获取Bangumi近期热门、每日放送数据，支持榜单筛选。",
-    version: "3.1.0",
+    version: "3.2.0",
     author: "ICoeMix(Optimized by ChatGPT) ",
     site: "https://github.com/ICoeMix/Forward-Widget",
     requiredVersion: "0.0.1",
