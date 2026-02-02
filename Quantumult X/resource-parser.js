@@ -1042,47 +1042,52 @@ function Mock2QXReject(row, filename) {
 }
 
 //url-regex 转换成 Quantumult X 重写
-function URX2QX(subs) {
-    var nrw = []
-    var rw = ""
-    subs = subs.split("\n")
-    //$notify("URX")
-    var NoteK = ["//", "#", ";"];  //排除注释项
-    // 🔧 是否存在 [Map Local]
-    var hasMapLocal = subs.some(l => /^\s*\[Map Local\]/.test(l))
-    for (var i = 0; i < subs.length; i++) {
-        const line = subs[i]
-        if (NoteK.some(k => line.indexOf(k) === 0)) continue
-        if (line.slice(0, 9) === "URL-REGEX") {
-            if (line.includes("REJECT") || line.split(",").length === 2) {
-                let t = line.replace(/ /g, "").split(",REJECT")[0].split("GEX,")[1]
-                if (t && t[0] !== "*") nrw.push(t + " url reject-200")
-            }
-        } else if (hasMapLocal && line.includes("data=")) {
-            let fn = (line.match(/data=.+\/(.+)"/) || [])[1]
-            if (fn === undefined || (!/header=".*content-type/i.test(line) && /blank/i.test(fn))) {
-                if (typeof Mock2QXReject === "function") {
-                    rw = Mock2QXReject(line, fn)
-                } else continue
-            } else {
-                let filepath = (line.split("data=")[1]?.split(" ")[0] || "")
-                    .replace(/[" ]/g, "") || 
-                    "https://raw.githubusercontent.com/ICoeMix/ziyong/refs/heads/main/Quantumult%20X/null.html"
-            } else {
-                rw = subs[i].replace(/ /g, "").split("data=")[0].split("data-type=")[0].replace(/\"/g,"") + " url echo-response text/html echo-response " + subs[i].split("data=")[1].split(" ")[0].replace(/\"/g,"").replace(/ /g, "")//"reject-dict"
-                if (subs[i].indexOf("header=")!=-1) {
-                    if (subs[i].indexOf("Content-Type:") !=-1) {
-                        let tpe = subs[i].split("header=")[1].split("Content-Type:")[1].split(",")[0].replace(/\"/g,"")
-                        rw = rw.replace(/text\/html/g,tpe)
-                    }
-                }
-            }
-            nrw.push(rw)
-        } 
+function URX2QX(subs){
+  let nrw=[],rw="",NoteK=["//","#",";"];
+  subs=subs.split("\n");
+  const hasMapLocal=subs.some(l=>/^\s*\[Map Local\]/.test(l));
+
+  for(let i=0;i<subs.length;i++){
+    const line=subs[i];
+    if(NoteK.some(n=>line.indexOf(n)==0)) continue;
+
+    if(line.slice(0,9)=="URL-REGEX"){
+      if(line.indexOf("REJECT")!=-1||line.split(",").length==2){
+        let tmp=line.replace(/ /g,"").split(",REJECT")[0].split("GEX,");
+        if(tmp[1]&&tmp[1][0]!="*") nrw.push(tmp[1]+" url reject-200");
+      }
+
+    }else if(hasMapLocal&&line.indexOf("data=")!=-1){
+      let fnMatch=line.match(/data=.+\/(.+)"/),
+          fn=fnMatch?fnMatch[1]:null;
+
+      if(fn===null||(!/header=".*content-type/i.test(line)&&/blank/i.test(fn))){
+        if(typeof Mock2QXReject!=="function") continue;
+        rw=Mock2QXReject(line,fn);
+      }else{
+        let filepath=line.split("data=")[1]?.split(" ")[0]
+          ?.replace(/\"| /g,"");
+        if(!filepath||filepath=="{}") 
+          filepath="https://raw.githubusercontent.com/ICoeMix/ziyong/refs/heads/main/Quantumult%20X/null.html";
+
+        rw=line.replace(/ /g,"")
+          .split("data=")[0]
+          .split("data-type=")[0]
+          .replace(/\"/g,"")
+          +" url echo-response text/html echo-response "+filepath;
+
+        if(line.indexOf("header=")!=-1&&line.indexOf("Content-Type:")!=-1){
+          let tpe=line.split("header=")[1]
+            .split("Content-Type:")[1]
+            .split(",")[0]
+            .replace(/\"/g,"");
+          rw=rw.replace("text/html",tpe);
+        }
+      }
+      nrw.push(rw);
     }
-    }
-    //$notify("URX","",nrw)
-    return nrw
+  }
+  return nrw;
 }
 
 //script&rewrite 转换成 Quantumult X
