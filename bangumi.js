@@ -349,53 +349,41 @@ const DynamicDataProcessor = (() => {
 
 // 1. 近期热门
 async function fetchRecentHot(params = {}) {
-    // 1️⃣ 确保全局数据已加载
     await fetchAndCacheGlobalData();
 
     const category = params.category || "anime";
     const sort = params.sort || "default";
 
-    // 2️⃣ 解析页码参数（支持 1 / 1-3）
-    let pageList = [];
+    // 解析页码
     const pageInput = params.pages || "1";
+    let pageList = [];
 
     if (pageInput.includes("-")) {
-        const [start, end] = pageInput.split("-").map(n => parseInt(n, 10));
-        for (let i = start; i <= end; i++) {
-            if (!isNaN(i)) pageList.push(i);
-        }
+        const [start, end] = pageInput.split("-").map(n => Number(n));
+        for (let i = start; i <= end; i++) pageList.push(i);
     } else {
-        const p = parseInt(pageInput, 10);
-        if (!isNaN(p)) pageList.push(p);
+        pageList.push(Number(pageInput));
     }
 
-    // 3️⃣ 从 GitHub 处理后的 recentHot 数据中取页
+    // 取 GitHub 端已处理的 TMDB 数据
     const pages = globalData.recentHot?.[category] || [];
-    let resultList = [];
+    let list = [];
 
     for (const p of pageList) {
-        if (pages[p - 1] && Array.isArray(pages[p - 1])) {
-            resultList = resultList.concat(pages[p - 1]);
-        }
+        if (pages[p - 1]) list = list.concat(pages[p - 1]);
     }
 
-    // 4️⃣ 核心逻辑：只保留有横版 backdrop 的项（不再二次 TMDB 处理）
-    let processedList = resultList.filter(item => item && item.backdropPath);
+    // ✅ 核心：硬性要求 backdropPath
+    let result = list.filter(item => item && item.backdropPath);
 
-    // 5️⃣ 排序逻辑
+    // 排序
     if (sort === "date") {
-        processedList.sort((a, b) => {
-            return new Date(b.releaseDate || 0) - new Date(a.releaseDate || 0);
-        });
+        result.sort((a, b) => new Date(b.releaseDate || 0) - new Date(a.releaseDate || 0));
     } else if (sort === "score") {
-        processedList.sort((a, b) => {
-            return (b.rating || 0) - (a.rating || 0);
-        });
+        result.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
     }
-    // sort === "default"：保持原顺序（即 GitHub 产出顺序）
 
-    // 6️⃣ 返回最终结果
-    return processedList;
+    return result;
 }
 
 // 2. 年度榜单
