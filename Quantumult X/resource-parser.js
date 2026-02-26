@@ -3501,10 +3501,21 @@ function CS52QX(cnt){
 }
 
 // clash vless type ,2026-01-07
+function formatUUID(u) {
+  if (!u) return u
+  // 已经是 UUID 格式就直接返回
+  if (u.includes("-")) return u
+  // 32 位 hex → 8-4-4-4-12
+  return u.replace(
+    /^(.{8})(.{4})(.{4})(.{4})(.{12})$/,
+    "$1-$2-$3-$4-$5"
+  )
+}
+
 function CVL2QX(cnt){
   tag = "tag="+cnt.name.replace(/\\U.+?\s{1}/gi," ").replace(/(\"|\')/gi,"")
   ipt = cnt.server+":"+cnt.port
-  pwd = "password=" + cnt.uuid
+  pwd = "password=" + formatUUID(cnt.uuid)
   mtd = "method=none" //cnt.cipher
   udp = cnt.udp ? "udp-relay=true" : "udp-relay=false"
   tfo = cnt.tfo ? "fast-open=true" : "fast-open=false"
