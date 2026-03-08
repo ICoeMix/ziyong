@@ -1,4 +1,3 @@
-// ⟦2026-03-08 20:46:28⟧
 /**
  ☑️ 资源解析器 ©ICoeMix  ⟦2026-2-25 22:02:29⟧
  🗣 🆃🄷🄰🄽🄺🅂 🆃🄾  @Jamie CHIEN, @M**F**, @c0lada, @Peng-YM, @vinewx, @love4taylor, @shadowdogy, @𝐒𝐡𝐚𝐰𝐧
