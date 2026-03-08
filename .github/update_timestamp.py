@@ -6,8 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 
-JS_TIMESTAMP_LINE = re.compile(r"^//\s*⟦\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}⟧\s*$")
+JS_TIMESTAMP_LINE = re.compile(r"^//\s*⟦\d{4}-\d{1,2}-\d{1,2} \d{1,2}:\d{2}:\d{2}⟧\s*$")
 METADATA_DATE_LINE = re.compile(r"^#!date=.*$")
+BRACKET_TIMESTAMP_TOKEN = re.compile(r"⟦\d{4}-\d{1,2}-\d{1,2} \d{1,2}:\d{2}:\d{2}⟧")
 
 
 def detect_newline(content: str) -> str:
@@ -64,18 +65,36 @@ def update_metadata_js(lines: list[str], timestamp: str, newline: str) -> list[s
 
 def update_regular_js(lines: list[str], timestamp: str, newline: str) -> list[str]:
     timestamp_line = f"// ⟦{timestamp}⟧{newline}"
+    timestamp_token = f"⟦{timestamp}⟧"
+    offset = 1 if (lines and lines[0].startswith("#!/")) else 0
 
-    if lines and lines[0].startswith("#!/"):
-        # 保持 shebang 在第一行，时间戳插入到第二行。
-        if len(lines) > 1 and JS_TIMESTAMP_LINE.match(lines[1].rstrip("\r\n")):
-            lines[1] = timestamp_line
-            return lines
-        return [lines[0], timestamp_line, *lines[1:]]
+    # `resource-parser.js` 这类块注释头里自带时间戳时，优先覆盖注释内时间戳。
+    # 如果之前插入了 `// ⟦...⟧` 首行，会一并移除，避免双时间戳。
+    if (
+        len(lines) > offset + 1
+        and JS_TIMESTAMP_LINE.match(lines[offset].rstrip("\r\n"))
+        and lines[offset + 1].lstrip().startswith("/**")
+    ):
+        lines = lines[:offset] + lines[offset + 1 :]
 
-    if lines and JS_TIMESTAMP_LINE.match(lines[0].rstrip("\r\n")):
-        lines[0] = timestamp_line
+    if len(lines) > offset and lines[offset].lstrip().startswith("/**"):
+        scan_end = min(len(lines), offset + 20)
+        for i in range(offset, scan_end):
+            raw = lines[i].rstrip("\r\n")
+            if BRACKET_TIMESTAMP_TOKEN.search(raw):
+                replaced = BRACKET_TIMESTAMP_TOKEN.sub(timestamp_token, raw, count=1)
+                lines[i] = replaced + newline
+                return lines
+            if "*/" in raw:
+                break
+
+    # 普通 JS：保留/更新单行注释时间戳。
+    if len(lines) > offset and JS_TIMESTAMP_LINE.match(lines[offset].rstrip("\r\n")):
+        lines[offset] = timestamp_line
         return lines
 
+    if offset == 1:
+        return [lines[0], timestamp_line, *lines[1:]]
     return [timestamp_line, *lines]
 
 
