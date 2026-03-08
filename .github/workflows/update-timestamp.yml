@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   update-timestamps:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,19 +21,27 @@ jobs:
           python-version: '3.x'
 
       - name: Update timestamps
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          TZ: Asia/Shanghai
         run: |
-          # 获取自上次提交以来改动的目标文件
-          files=$(git diff --name-only origin/main..HEAD | grep -E '\.(py|js|ts|c|cpp|go|md|java)$' || true)
-          if [ -n "$files" ]; then
-            python update_timestamp.py $files
+          if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            mapfile -d '' files < <(git ls-files -z '*.js')
+          else
+            mapfile -d '' files < <(git diff --name-only -z "$BEFORE_SHA" "$CURRENT_SHA" -- '*.js')
+          fi
+
+          if [ ${#files[@]} -gt 0 ]; then
+            python .github/update_timestamp.py "${files[@]}"
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add $files
+            git add -- "${files[@]}"
             git diff --cached --quiet || (
               git commit -m "🕒 Auto update timestamps [skip ci]"
               git pull origin main --rebase
               git push origin main
             )
           else
-            echo "No relevant files changed."
+            echo "No .js files changed."
           fi
