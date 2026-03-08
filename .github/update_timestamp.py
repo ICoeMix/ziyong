@@ -1,23 +1,125 @@
-import sys
 import re
+import subprocess
+import sys
+import os
 from datetime import datetime
+from pathlib import Path
+from typing import Optional, Tuple
 
-# 匹配 ⟦YYYY-MM-DD HH:MM:SS⟧
-timestamp_pat = re.compile(r'⟦\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}⟧')
-now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+JS_TIMESTAMP_LINE = re.compile(r"^//\s*⟦\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}⟧\s*$")
+METADATA_DATE_LINE = re.compile(r"^#!date=.*$")
 
-def update_file(filename):
+
+def detect_newline(content: str) -> str:
+    if "\r\n" in content:
+        return "\r\n"
+    return "\n"
+
+
+def git_last_modified(filename: str) -> Optional[str]:
+    cmd = [
+        "git",
+        "log",
+        "-1",
+        "--format=%ad",
+        "--date=format:%Y-%m-%d %H:%M:%S",
+        "--",
+        filename,
+    ]
     try:
-        with open(filename, 'r', encoding='utf-8') as f:
-            content = f.read()
-        # 替换已有时间戳
-        new_content = timestamp_pat.sub(f'⟦{now}⟧', content)
-        if new_content != content:
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(new_content)
-            print(f"Updated timestamp: {filename}")
-    except Exception as e:
-        print(f"Error {filename}: {e}")
+        output = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    return output or None
+
+
+def file_last_modified(path: Path) -> str:
+    return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_timestamp(path: Path) -> Tuple[str, str]:
+    git_timestamp = git_last_modified(str(path))
+    if git_timestamp:
+        return git_timestamp, "git"
+    return file_last_modified(path), "mtime"
+
+
+def align_mtime(path: Path, timestamp: str) -> None:
+    try:
+        dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+        ts = dt.timestamp()
+        os.utime(path, (ts, ts))
+    except Exception:
+        # 对齐 mtime 失败不影响主流程
+        pass
+
+
+def update_metadata_js(lines: list[str], timestamp: str, newline: str) -> list[str]:
+    timestamp_line = f"#!date={timestamp}{newline}"
+    lines_without_date = [
+        line for line in lines if not METADATA_DATE_LINE.match(line.rstrip("\r\n"))
+    ]
+    return [timestamp_line, *lines_without_date]
+
+
+def update_regular_js(lines: list[str], timestamp: str, newline: str) -> list[str]:
+    timestamp_line = f"// ⟦{timestamp}⟧{newline}"
+
+    if lines and lines[0].startswith("#!/"):
+        # 保持 shebang 在第一行，时间戳插入到第二行。
+        if len(lines) > 1 and JS_TIMESTAMP_LINE.match(lines[1].rstrip("\r\n")):
+            lines[1] = timestamp_line
+            return lines
+        return [lines[0], timestamp_line, *lines[1:]]
+
+    if lines and JS_TIMESTAMP_LINE.match(lines[0].rstrip("\r\n")):
+        lines[0] = timestamp_line
+        return lines
+
+    return [timestamp_line, *lines]
+
+
+def update_file(filename: str) -> None:
+    path = Path(filename)
+    if path.suffix.lower() != ".js":
+        return
+    if not path.exists():
+        print(f"Skip missing file: {filename}")
+        return
+
+    try:
+        content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        print(f"Skip non-utf8 file: {filename}")
+        return
+    except Exception as exc:
+        print(f"Error reading {filename}: {exc}")
+        return
+
+    newline = detect_newline(content)
+    lines = content.splitlines(keepends=True)
+    timestamp, source = get_timestamp(path)
+
+    if lines and lines[0].startswith("#!") and not lines[0].startswith("#!/"):
+        new_lines = update_metadata_js(lines, timestamp, newline)
+    else:
+        new_lines = update_regular_js(lines, timestamp, newline)
+
+    new_content = "".join(new_lines)
+    if new_content == content:
+        return
+
+    try:
+        path.write_text(new_content, encoding="utf-8")
+    except Exception as exc:
+        print(f"Error writing {filename}: {exc}")
+        return
+
+    if source == "mtime":
+        align_mtime(path, timestamp)
+
+    print(f"Updated timestamp: {filename} -> {timestamp}")
+
 
 if __name__ == "__main__":
     for file in sys.argv[1:]:
