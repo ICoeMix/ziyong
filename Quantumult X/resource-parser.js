@@ -1347,38 +1347,42 @@ function Mock2QXReject(row, filename) {
 function URX2QX(subs) {
     var nrw = []
     var rw = ""
+    var NoteK = ["//", "#", ";"]
     subs = subs.split("\n")
-    //$notify("URX")
-    var NoteK = ["//", "#", ";"];  //排除注释项
+    const hasMapLocal = subs.some(line => /^\s*\[Map Local\]/.test(line))
     for (var i = 0; i < subs.length; i++) {
-        const notecheck = (item) => subs[i].indexOf(item) == 0
-        if (!NoteK.some(notecheck)) {
-        if (subs[i].slice(0, 9) == "URL-REGEX") {  // regex 类型
-          if (subs[i].indexOf("REJECT") != -1 || subs[i].split(",").length == 2 ) { // 仅处理 reject 类型，或者无指定策略类型
-            if (subs[i].replace(/ /g, "").split(",REJECT")[0].split("GEX,")[1].slice(0,1) != "*") { // 部分 * 开头的不支持 url-regex形式
-            rw = subs[i].replace(/ /g, "").split(",REJECT")[0].split("GEX,")[1] + " url " + "reject-200"
-            nrw.push(rw)
-          }
-          }
-        } else if (subs[i].indexOf("data=") != -1 && subs.indexOf("[Map Local]") != -1){ // Map Local 类型
-            // 取subs[i]的文件名
-            let fn = subs[i].match(/data=.+\/(.+)"/) ? subs[i].match(/data=.+\/(.+)"/)[1] : null
-            if ((!/header=".*content-type/i.test(subs[i]) && /blank/i.test(fn)) || fn==null) {
-                rw = Mock2QXReject(subs[i], fn)
+        let line = subs[i]
+        if (NoteK.some(k => line.indexOf(k) == 0)) continue
+        if (line.slice(0, 9) == "URL-REGEX") {
+            if (line.indexOf("REJECT") != -1 || line.split(",").length == 2) {
+                let rule = line.replace(/ /g, "").split(",REJECT")[0].split("GEX,")[1]
+                if (rule && rule[0] != "*") nrw.push(rule + " url reject-200")
+            }
+            continue
+        }
+        if (hasMapLocal && line.indexOf("data=") != -1) {
+            let fnMatch = line.match(/data=.+\/(.+)"/)
+            let fn = fnMatch ? fnMatch[1] : null
+            if ((!/header=".*content-type/i.test(line) && /blank/i.test(fn || "")) || fn == null) {
+                if (typeof Mock2QXReject !== "function") continue
+                rw = Mock2QXReject(line, fn)
             } else {
-                rw = subs[i].replace(/ /g, "").split("data=")[0].split("data-type=")[0].replace(/\"/g,"") + " url echo-response text/html echo-response " + subs[i].split("data=")[1].split(" ")[0].replace(/\"/g,"").replace(/ /g, "")//"reject-dict"
-                if (subs[i].indexOf("header=")!=-1) {
-                    if (subs[i].indexOf("Content-Type:") !=-1) {
-                        let tpe = subs[i].split("header=")[1].split("Content-Type:")[1].split(",")[0].replace(/\"/g,"")
-                        rw = rw.replace(/text\/html/g,tpe)
-                    }
+                let filepath = line.split("data=")[1]?.split(" ")[0]?.replace(/"| /g, "")
+                if (!filepath || filepath == "{}") {
+                    filepath = "https://raw.githubusercontent.com/ICoeMix/ziyong/refs/heads/main/Quantumult%20X/null.html"
+                }
+                rw = line.replace(/ /g, "")
+                    .split("data=")[0]
+                    .split("data-type=")[0]
+                    .replace(/"/g, "") + " url echo-response text/html echo-response " + filepath
+                if (line.indexOf("header=") != -1 && line.indexOf("Content-Type:") != -1) {
+                    let tpe = line.split("header=")[1].split("Content-Type:")[1].split(",")[0].replace(/"/g, "")
+                    rw = rw.replace("text/html", tpe)
                 }
             }
             nrw.push(rw)
-        } 
+        }
     }
-    }
-    //$notify("URX","",nrw)
     return nrw
 }
 
