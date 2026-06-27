@@ -3281,7 +3281,7 @@ function SATS2QX(content) {
     if (Pdbg==1) {$notify(cnt)}
     var tag = "tag=" + cnt.split("=")[0].trim();
     var ipport = cnt.split(",")[1].trim() + ":" + cnt.split(",")[2].trim();
-    var pwd = "password=" + cnt.split("password")[1].split(",")[0].split("=")[1].trim();
+    var pwd = "password=" + cnt.split("password")[1].split(",")[0].split("=")[1].trim().replace(/^"|"$/g, "");
     var ptls = "over-tls=true";
     //var ptfo = paraCheck(cnt, "tfo") == "true" ? "fast-open=true" : "fast-open=false";
     var pverify = cnt.replace(/ /g,"").indexOf("skip-cert-verify=false") != -1 ? "tls-verification=true" : "tls-verification=false";
